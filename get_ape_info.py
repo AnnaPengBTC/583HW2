@@ -1,0 +1,80 @@
+from web3 import Web3
+from web3.contract import Contract
+from web3.providers.rpc import HTTPProvider
+import requests
+import json
+import time
+
+#bayc_address = "0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D"
+#contract_address = Web3.toChecksumAddress(bayc_address)
+
+#You will need the ABI to connect to the contract
+#The file 'abi.json' has the ABI for the bored ape contract
+#In general, you can get contract ABIs from etherscan
+#https://api.etherscan.io/api?module=contract&action=getabi&address=0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D
+CONTRACT_ADDRESS = '0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D'
+ABI_ENDPOINT = 'https://api.etherscan.io/api?module=contract&action=getabi&address='
+
+with open('/home/codio/workspace/abi.json', 'r') as f:
+	abi = json.load(f) 
+try:
+    response = requests.get( f"{ABI_ENDPOINT}{CONTRACT_ADDRESS}", timeout = 20 )	
+    abi = response.json()['result']
+except Exception as e:
+    print( f"Failed to get BAYC contract from {ABI_ENDPOINT}" )
+    print( e )
+
+############################
+#Connect to an Ethereum node
+
+api_url = "https://eth-mainnet.alchemyapi.io/v2/SOkgZqoU7p6kohfwBxhX6g-i702SwTRs"  #YOU WILL NEED TO TO PROVIDE THE URL OF AN ETHEREUM NODE
+provider = HTTPProvider(api_url)
+web3 = Web3(provider)
+contract = web3.eth.contract(address=CONTRACT_ADDRESS, abi=abi)
+
+def get_from_ipfs(cid,content_type="json"):
+	assert isinstance(cid,str), f"get_from_ipfs accepts a cid in the form of a string"
+	#YOUR CODE HERE	
+	gateway=f"https://gateway.pinata.cloud/ipfs/{cid}"
+	headers={
+		'pinata_api_key':'37e6ad229f4345d03996',
+		'pinata_secret_api_key':'a1d3e4dea02a3d298cc71a05669b098c747f801276df39ba9d355f8464c9cdb5'
+
+	}
+	response = requests.get(gateway, headers=headers)
+	print(response.json())
+	if content_type =="json":
+		data = response.json()
+	else:
+		data = response.content
+
+	assert isinstance(data,dict), f"get_from_ipfs should return a dict"
+	return data
+
+def get_ape_info(apeID):
+	assert isinstance(apeID,int), f"{apeID} is not an int"
+	assert 1 <= apeID, f"{apeID} must be at least 1"
+	assert apeID < 10000, f"{apeID} must be at most 9999"
+
+
+	data = {'owner': "", 'image': "", 'eyes': "" }
+	
+	#YOUR CODE HERE	
+	owner = contract.functions.ownerOf(apeID).call()
+	data['owner'] = owner
+
+	uri = contract.functions.tokenURI(apeID).call()
+	bayc_cid = uri.replace('ipfs://', '')
+	content_data = get_from_ipfs(bayc_cid)
+
+	data['image'] = content_data['image']
+
+	for attr in content_data['attributes']:
+		if attr['trait_type'] == 'Eyes':
+			data['eyes'] = attr['value']
+
+
+	assert isinstance(data,dict), f'get_ape_info{apeID} should return a dict' 
+	assert all( [a in data.keys() for a in ['owner','image','eyes']] ), f"return value should include the keys 'owner','image' and 'eyes'"
+	return data
+
